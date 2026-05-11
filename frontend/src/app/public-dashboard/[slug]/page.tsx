@@ -115,8 +115,8 @@ export default function PublicDashboardPage() {
                 key={widget.id}
                 widget={widget}
                 dashboardId={dashboard.id}
-                isPublic
-                publicSlug={slug}
+                // isPublic
+                // publicSlug={slug}
               />
             ))}
           </div>

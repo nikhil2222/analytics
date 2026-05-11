@@ -41,6 +41,13 @@ class DashboardRepository:
             )
         )
         return result.scalar_one_or_none()
+    
+    async def get_public_by_slug(self, slug: str):
+        result = await self.db.execute(
+            select(Dashboard)
+            .where(Dashboard.public_slug == slug, Dashboard.is_public == True)
+        )
+        return result.scalar_one_or_none()
 
     async def list_by_org(self, org_id: uuid.UUID) -> list[Dashboard]:
         result = await self.db.execute(

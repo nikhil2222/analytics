@@ -46,6 +46,38 @@ async def get_public_dashboard(
     return await DashboardService(db).get_public_dashboard(slug)
 
 
+@router.post("/{dashboard_id}/share/public")
+async def enable_public_dashboard_share(
+    dashboard_id: uuid.UUID,
+    current_user: User = Depends(require_role(UserRole.OWNER, UserRole.ADMIN, UserRole.ANALYST)),
+    db: AsyncSession = Depends(get_db),
+):
+    dashboard = await DashboardService(db).enable_public_share(
+        dashboard_id, current_user.org_id
+    )
+    return {
+        "id": str(dashboard.id),
+        "is_public": dashboard.is_public,
+        "public_slug": dashboard.public_slug,
+    }
+
+
+@router.delete("/{dashboard_id}/share/public")
+async def disable_public_dashboard_share(
+    dashboard_id: uuid.UUID,
+    current_user: User = Depends(require_role(UserRole.OWNER, UserRole.ADMIN, UserRole.ANALYST)),
+    db: AsyncSession = Depends(get_db),
+):
+    dashboard = await DashboardService(db).disable_public_share(
+        dashboard_id, current_user.org_id
+    )
+    return {
+        "id": str(dashboard.id),
+        "is_public": dashboard.is_public,
+        "public_slug": dashboard.public_slug,
+    }
+
+
 @router.get("/{dashboard_id}", response_model=DashboardResponse)
 async def get_dashboard(
     dashboard_id: uuid.UUID,

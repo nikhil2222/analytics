@@ -21,9 +21,12 @@ class DashboardService:
         self.dash_repo = DashboardRepository(db)
         self.widget_repo = WidgetRepository(db)
 
+
     # ── Dashboard CRUD ─────────────────────────────────────────────────────
 
-    async def create_dashboard(self, data: DashboardCreate, org_id: uuid.UUID, user_id: uuid.UUID) -> Dashboard:
+    async def create_dashboard(
+        self, data: DashboardCreate, org_id: uuid.UUID, user_id: uuid.UUID
+    ) -> Dashboard:
         return await self.dash_repo.create(
             org_id=org_id,
             created_by=user_id,
@@ -47,11 +50,12 @@ class DashboardService:
             raise HTTPException(status_code=404, detail="Dashboard not found")
         return dashboard
 
-    async def update_dashboard(self, dashboard_id: uuid.UUID, org_id: uuid.UUID, data: DashboardUpdate) -> Dashboard:
+    async def update_dashboard(
+        self, dashboard_id: uuid.UUID, org_id: uuid.UUID, data: DashboardUpdate
+    ) -> Dashboard:
         dashboard = await self.get_dashboard(dashboard_id, org_id)
         updates = data.model_dump(exclude_none=True)
 
-        # generate public slug if being made public
         if updates.get("is_public") and not dashboard.public_slug:
             updates["public_slug"] = secrets.token_urlsafe(10)
 
@@ -61,10 +65,40 @@ class DashboardService:
         dashboard = await self.get_dashboard(dashboard_id, org_id)
         await self.dash_repo.soft_delete(dashboard)
 
+    async def enable_public_share(
+        self, dashboard_id: uuid.UUID, org_id: uuid.UUID
+    ) -> Dashboard:
+        dashboard = await self.dash_repo.get_by_id(dashboard_id, org_id)
+        if not dashboard:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+
+        if not dashboard.public_slug:
+            dashboard.public_slug = secrets.token_urlsafe(16)
+
+        dashboard.is_public = True
+        await self.db.commit()
+        await self.db.refresh(dashboard)
+        return dashboard
+
+    async def disable_public_share(
+        self, dashboard_id: uuid.UUID, org_id: uuid.UUID
+    ) -> Dashboard:
+        dashboard = await self.dash_repo.get_by_id(dashboard_id, org_id)
+        if not dashboard:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+
+        dashboard.is_public = False
+        await self.db.commit()
+        await self.db.refresh(dashboard)
+        return dashboard
+
+
     # ── Widget CRUD ────────────────────────────────────────────────────────
 
-    async def create_widget(self, dashboard_id: uuid.UUID, org_id: uuid.UUID, data: WidgetCreate) -> Widget:
-        await self.get_dashboard(dashboard_id, org_id)  # verify dashboard exists & belongs to org
+    async def create_widget(
+        self, dashboard_id: uuid.UUID, org_id: uuid.UUID, data: WidgetCreate
+    ) -> Widget:
+        await self.get_dashboard(dashboard_id, org_id)
         return await self.widget_repo.create(
             dashboard_id=dashboard_id,
             org_id=org_id,
@@ -74,7 +108,9 @@ class DashboardService:
             position=data.position.model_dump(),
         )
 
-    async def update_widget(self, widget_id: uuid.UUID, org_id: uuid.UUID, data: WidgetUpdate) -> Widget:
+    async def update_widget(
+        self, widget_id: uuid.UUID, org_id: uuid.UUID, data: WidgetUpdate
+    ) -> Widget:
         widget = await self.widget_repo.get_by_id(widget_id, org_id)
         if not widget:
             raise HTTPException(status_code=404, detail="Widget not found")
@@ -90,6 +126,7 @@ class DashboardService:
         if not widget:
             raise HTTPException(status_code=404, detail="Widget not found")
         await self.widget_repo.soft_delete(widget)
+
 
     # ── Widget Data Query ──────────────────────────────────────────────────
 
@@ -132,7 +169,6 @@ class DashboardService:
             }
 
         elif widget.type == "pie":
-            group_by_field = config.get("group_by", "name")
             result = await self.db.execute(
                 select(Event.name, func.count(Event.id).label("count"))
                 .where(and_(*filters))

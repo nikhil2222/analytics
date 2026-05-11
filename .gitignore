@@ -1,0 +1,89 @@
+# ------------------------------
+# OS / Editor
+# ------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ------------------------------
+# Environment files
+# ------------------------------
+.env
+.env.*
+!.env.example
+!.env.local.example
+backend/.env
+frontend/.env.local
+
+# ------------------------------
+# Python / FastAPI
+# ------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+backend/.venv/
+backend/venv/
+
+# Logs
+*.log
+pip-log.txt
+
+# Alembic / DB / local artifacts
+*.sqlite3
+*.db
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.*
+*.pid
+
+# ------------------------------
+# Node / Next.js
+# ------------------------------
+node_modules/
+frontend/node_modules/
+
+.next/
+frontend/.next/
+out/
+frontend/out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Package manager files you usually DO keep:
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ------------------------------
+# Deployment / cloud
+# ------------------------------
+.vercel/
+.render/
+.railway/
+
+# ------------------------------
+# Misc generated files
+# ------------------------------
+tmp/
+temp/
+.cache/

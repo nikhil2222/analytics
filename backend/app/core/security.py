@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+import bcrypt
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+from jose import jwt, JWTError
+from app.core.config import settings
+
+
+def hash_password(password: str) -> str:
+    pwd_bytes = password.encode("utf-8")
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+
+
+def create_access_token(subject: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(
+        {"sub": subject, "exp": expire},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
+    )
+
+
+def create_refresh_token(subject: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    return jwt.encode(
+        {"sub": subject, "exp": expire, "type": "refresh"},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
+    )
+
+
+def decode_token(token: str) -> Optional[str]:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        return None

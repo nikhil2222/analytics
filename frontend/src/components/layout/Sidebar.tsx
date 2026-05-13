@@ -9,6 +9,7 @@ import {
   Settings,
   Activity,
   Webhook,
+  FileText
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/alerts", icon: Bell, label: "Alerts" },
   { href: "/settings", icon: Settings, label: "Settings" },
   { href: "/settings/webhooks", icon: Webhook, label: "Webhooks" },
+  { href: "/reports", icon: FileText, label: "Reports" },
 ];
 
 export default function Sidebar() {

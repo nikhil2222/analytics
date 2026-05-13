@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.schemas.webhook import WebhookCreate, WebhookResponse  
 from app.db.session import get_db
 from app.core.dependencies import get_current_user, require_role
 from app.core.rate_limit import limiter
@@ -129,3 +129,46 @@ async def revoke_api_key(
 ):
     await EventService(db).revoke_api_key(key_id, current_user.org_id)
     return {"message": "API key revoked"}
+
+@router.post("/ingest/webhook/{webhook_id}", summary="Receive webhook events")
+async def ingest_webhook(
+    request: Request,
+    webhook_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Slack-compatible webhook receiver.
+    Payload can be:
+    - Single event: {"name": "...", "timestamp": "...", "properties": {...}}
+    - Batch:        {"events": [...]}
+    - Slack-style:  {"type": "...", "payload": {...}}
+    """
+    return await EventService(db).ingest_webhook(webhook_id, request)
+
+@router.post("/webhooks", summary="Create webhook source")
+async def create_webhook(
+    data: WebhookCreate,
+    current_user: User = Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    wh = await EventService(db).create_webhook(data.name, current_user.org_id, current_user.id)
+    webhook_url = f"/api/v1/events/ingest/webhook/{wh.id}"
+    return {"id": str(wh.id), "name": wh.name, "webhook_url": webhook_url}
+
+
+@router.get("/webhooks", summary="List webhook sources")
+async def list_webhooks(
+    current_user: User = Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await EventService(db).list_webhooks(current_user.org_id)
+
+
+@router.delete("/webhooks/{webhook_id}", summary="Revoke webhook")
+async def revoke_webhook(
+    webhook_id: uuid.UUID,
+    current_user: User = Depends(require_role(UserRole.OWNER, UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    await EventService(db).revoke_webhook(webhook_id, current_user.org_id)
+    return {"message": "Webhook revoked"}

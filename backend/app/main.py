@@ -5,10 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.session import engine
 from app.db.base import Base
-from app.models import organization, user, invite   # registers all models
+from app.models import organization, user, invite, webhook, report
 from app.api.v1 import auth
 from app.api.v1 import auth, events 
-from app.api.v1 import auth, events, dashboards, alerts
+from app.api.v1 import auth, events, dashboards, alerts,reports
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -40,6 +40,7 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
 app.include_router(dashboards.router, prefix="/api/v1")
 app.include_router(alerts.router, prefix="/api/v1")
+app.include_router(reports.router, prefix="/api/v1")  
 @app.get("/health")
 async def health():
     return {"status": "ok"}

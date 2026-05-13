@@ -30,14 +30,17 @@ celery_app.conf.update(
 
 # ── Celery Beat Schedule ───────────────────────────────────────────────────
 celery_app.conf.beat_schedule = {
-    # Evaluate all active alerts every minute
     "evaluate-alerts-every-minute": {
         "task": "app.tasks.alert_tasks.evaluate_all_alerts",
-        "schedule": 60.0,              # every 60 seconds
+        "schedule": 60.0,
     },
-    # Clean up old events every day at 2 AM UTC
     "cleanup-old-events-daily": {
         "task": "app.tasks.event_tasks.cleanup_old_events",
         "schedule": crontab(hour=2, minute=0),
+    },
+    # NEW
+    "run-scheduled-reports-every-hour": {
+        "task": "app.tasks.report_tasks.run_scheduled_reports",
+        "schedule": crontab(minute=0),  # top of every hour
     },
 }

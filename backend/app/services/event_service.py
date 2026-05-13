@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.websocket_manager import ws_manager
@@ -16,6 +16,7 @@ from app.models.api_key import APIKey
 from app.models.event import Event
 from app.repositories.api_key_repo import APIKeyRepository
 from app.repositories.event_repo import EventRepository
+from app.repositories.webhook_repo import WebhookRepository
 from app.schemas.event import EventPayload, APIKeyCreate
 
 
@@ -24,8 +25,7 @@ class EventService:
         self.db = db
         self.event_repo = EventRepository(db)
         self.api_key_repo = APIKeyRepository(db)
-
-    # ── API Key Management ─────────────────────────────────────────────────
+        self.webhook_repo = WebhookRepository(db)
 
     @staticmethod
     def _hash_key(raw_key: str) -> str:
@@ -44,7 +44,7 @@ class EventService:
             org_id=org_id,
             created_by=user_id,
         )
-        return api_key, raw_key  # raw_key shown ONCE only
+        return api_key, raw_key
 
     async def list_api_keys(self, org_id: uuid.UUID):
         return await self.api_key_repo.get_by_org(org_id)
@@ -57,8 +57,6 @@ class EventService:
     async def get_org_by_api_key(self, raw_key: str) -> Optional[APIKey]:
         key_hash = self._hash_key(raw_key)
         return await self.api_key_repo.get_by_hash(key_hash)
-
-    # ── Event Ingestion ────────────────────────────────────────────────────
 
     async def ingest_events(
         self,
@@ -80,18 +78,16 @@ class EventService:
         ]
         saved = await self.event_repo.create_many(events)
 
-        # ── Fire Celery background task (non-blocking) ─────────────────────
         try:
             from app.tasks.event_tasks import process_events_batch
+
             process_events_batch.delay(
                 event_ids=[str(e.id) for e in saved],
                 org_id=str(org_id),
             )
         except Exception:
-            # Celery not running — fail silently, ingestion still succeeds
             pass
 
-        # ── Broadcast to WebSocket connections ─────────────────────────────
         org_str = str(org_id)
         broadcast_data = {
             "type": "new_events",
@@ -107,11 +103,12 @@ class EventService:
                 for e in saved
             ],
         }
+
         try:
             await ws_manager.broadcast_to_org(org_str, broadcast_data)
             await ws_manager.broadcast_to_org(f"stream:{org_str}", broadcast_data)
         except Exception:
-            pass  # WS broadcast failure must never break ingestion
+            pass
 
         return saved
 
@@ -135,11 +132,13 @@ class EventService:
                     k: v for k, v in row.items()
                     if k not in ("name", "timestamp") and v != ""
                 }
-                payloads.append(EventPayload(
-                    name=row["name"].strip(),
-                    timestamp=ts,
-                    properties=props or None,
-                ))
+                payloads.append(
+                    EventPayload(
+                        name=row["name"].strip(),
+                        timestamp=ts,
+                        properties=props or None,
+                    )
+                )
             except Exception as e:
                 errors.append(f"Row {i}: {str(e)}")
 
@@ -168,4 +167,78 @@ class EventService:
             event_name=event_name,
             limit=limit,
             offset=offset,
+        )
+
+    async def create_webhook(self, name: str, org_id: uuid.UUID, user_id: uuid.UUID):
+        return await self.webhook_repo.create(org_id, user_id, name)
+
+    async def list_webhooks(self, org_id: uuid.UUID):
+        return await self.webhook_repo.get_by_org(org_id)
+
+    async def revoke_webhook(self, webhook_id: uuid.UUID, org_id: uuid.UUID):
+        revoked = await self.webhook_repo.revoke(webhook_id, org_id)
+        if not revoked:
+            raise HTTPException(status_code=404, detail="Webhook not found")
+
+    async def ingest_webhook(self, webhook_id: uuid.UUID, request: Request) -> dict:
+        webhook = await self.webhook_repo.get_by_id(webhook_id)
+        if not webhook:
+            raise HTTPException(status_code=404, detail="Invalid or revoked webhook")
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+        payloads: list[EventPayload] = []
+
+        if isinstance(body, dict) and "events" in body:
+            for item in body["events"]:
+                payloads.append(self._parse_webhook_event(item))
+        elif isinstance(body, dict) and "name" in body:
+            payloads.append(self._parse_webhook_event(body))
+        elif isinstance(body, dict) and "type" in body:
+            payload = body.get("payload", body)
+            event_name = body.get("type", "webhook_event")
+            payloads.append(
+                EventPayload(
+                    name=event_name,
+                    timestamp=None,
+                    properties=payload if isinstance(payload, dict) else {"data": str(payload)},
+                )
+            )
+        elif isinstance(body, list):
+            for item in body:
+                payloads.append(self._parse_webhook_event(item))
+        else:
+            raise HTTPException(status_code=400, detail="Unrecognized payload format")
+
+        if not payloads:
+            return {"ingested": 0}
+
+        events = await self.ingest_events(payloads, webhook.org_id, source="webhook")
+        return {"ingested": len(events)}
+
+    @staticmethod
+    def _parse_webhook_event(item: dict) -> EventPayload:
+        name = item.get("name") or item.get("event") or item.get("type") or "webhook_event"
+        ts_raw = item.get("timestamp") or item.get("time") or item.get("created_at")
+        ts = None
+
+        if ts_raw:
+            try:
+                ts = datetime.fromisoformat(str(ts_raw))
+            except Exception:
+                ts = None
+
+        props = {
+            k: v
+            for k, v in item.items()
+            if k not in ("name", "event", "type", "timestamp", "time", "created_at")
+        }
+
+        return EventPayload(
+            name=str(name),
+            timestamp=ts,
+            properties=props or None,
         )

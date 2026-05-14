@@ -107,6 +107,15 @@ class DashboardService:
             query_config=data.query_config.model_dump(),
             position=data.position.model_dump(),
         )
+    
+    async def get_public_widget_data(self, slug: str, widget_id: uuid.UUID) -> dict:
+        dashboard = await self.dash_repo.get_public_by_slug(slug)
+        if not dashboard or not dashboard.is_public:
+            raise HTTPException(status_code=404, detail="Dashboard not found or not public")
+        widget = await self.widget_repo.get_by_id(widget_id, dashboard.org_id)
+        if not widget or widget.dashboard_id != dashboard.id:
+            raise HTTPException(status_code=404, detail="Widget not found")
+        return await self.get_widget_data(widget_id, dashboard.org_id)
 
     async def update_widget(
         self, widget_id: uuid.UUID, org_id: uuid.UUID, data: WidgetUpdate

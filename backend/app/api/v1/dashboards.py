@@ -1,5 +1,6 @@
-from __future__ import annotations
+# from __future__ import annotations
 
+from http.client import HTTPException
 import uuid
 from typing import Optional
 
@@ -117,6 +118,14 @@ async def create_widget(
     db: AsyncSession = Depends(get_db),
 ):
     return await DashboardService(db).create_widget(dashboard_id, current_user.org_id, data)
+
+@router.get("/public/{slug}/widgets/{widget_id}/data")
+async def get_public_widget_data(
+    slug: str,
+    widget_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    return await DashboardService(db).get_public_widget_data(slug, widget_id)
 
 
 @router.patch("/{dashboard_id}/widgets/{widget_id}", response_model=WidgetResponse)

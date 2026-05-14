@@ -1,0 +1,4 @@
+name,timestamp,service,status,batch
+error_event,,api,500,csv1
+error_event,,api,500,csv1
+info_event,,api,200,csv1

@@ -9,11 +9,11 @@ from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-
+from app.models.dashboard import Dashboard
 from app.core.celery_app import celery_app
 from app.db.session import SyncSessionLocal
 from app.models.report import Report, ReportRun
-
+from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports")
@@ -22,13 +22,14 @@ os.makedirs(REPORTS_DIR, exist_ok=True)
 
 def _send_email_with_attachment(
     recipients: list[str], subject: str, body: str, file_path: str
-):
-    smtp_host = os.getenv("SMTP_HOST", "")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_pass = os.getenv("SMTP_PASS", "")
+): 
+    print(f"Sending email to {recipients} with attachment {file_path}")
+    smtp_host = settings.SMTP_HOST
+    smtp_port = settings.SMTP_PORT
+    smtp_user = settings.SMTP_USER
+    smtp_pass = settings.SMTP_PASS
     from_email = os.getenv("SMTP_FROM", smtp_user)
-
+    print(f"SMTP config - Host: {smtp_host}, Port: {smtp_port}, User: {smtp_user}")
     if not smtp_host or not smtp_user:
         logger.warning("SMTP not configured — skipping email")
         return
@@ -74,9 +75,15 @@ def generate_report_snapshot(
 
         try:
             from playwright.sync_api import sync_playwright
-
+            report = db.get(Report, run.report_id)
+            if not report:
+                raise ValueError("Report not found")
+            dashboard = db.get(Dashboard, report.dashboard_id)
+            if not dashboard or not dashboard.is_public or not dashboard.public_slug:
+                raise ValueError("Dashboard is not public or slug missing")
             frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-            dashboard_url = f"{frontend_url}/dashboard/{dashboard_id}"
+            dashboard_url = f"{frontend_url}/public-dashboard/{dashboard.public_slug}"
+            print(f"Generating report snapshot for dashboard {dashboard_url}")
             file_name = f"report_{run_id}.png"
             file_path = os.path.join(REPORTS_DIR, file_name)
 
